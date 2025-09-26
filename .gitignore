@@ -1,0 +1,18 @@
+# Generic ignores
+.DS_Store
+Thumbs.db
+node_modules/
+.env
+.vscode/
+__pycache__/
+*.pyc
+dist/
+build/
+
+# Logs
+*.log
+
+# OS files
+*.tmp
+
+# Add project-specific ignores below
