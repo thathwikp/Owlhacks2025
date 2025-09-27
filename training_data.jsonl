@@ -1,0 +1,24 @@
+import json
+
+# Your data, structured as a list of dictionaries
+# Each dictionary represents one prompt-completion pair
+data = [
+    {
+        "prompt": "User info: 180 lbs, muscle gain, no dairy allergy. Goal: High-protein dinner. Generate a meal plan.",
+        "completion": "Meal: Grilled Salmon with Roasted Asparagus. Calories: 550 kcal, Protein: 55g, Carbs: 10g, Fat: 30g. Ingredients: 1 salmon fillet, 1 cup asparagus, 1 tbsp olive oil, salt, pepper."
+    },
+    {
+        "prompt": "User info: 150 lbs, weight loss, vegetarian. Goal: Low-calorie lunch. Generate a meal plan.",
+        "completion": "Meal: Large Mixed Greens Salad. Calories: 300 kcal, Protein: 15g, Carbs: 35g, Fat: 10g. Ingredients: 2 cups mixed greens, 1/2 cup chickpeas, 1/4 cup cherry tomatoes, 1/4 avocado, light vinaigrette."
+    },
+    # Add more entries here from your dataset
+]
+
+# Name your file with the .jsonl extension
+file_name = "training_data.jsonl"
+
+# Write the data to the file, one JSON object per line
+with open(file_name, 'w') as outfile:
+    for entry in data:
+        json.dump(entry, outfile)
+        outfile.write('\n')  # Add a newline after each entry
