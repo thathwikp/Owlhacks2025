@@ -1,0 +1,55 @@
+import requests
+import json
+import string
+import time
+
+# Use the test API key '1' for free access
+API_KEY = "1"
+BASE_URL = f"https://www.themealdb.com/api/json/v1/{API_KEY}/"
+
+def get_meals_by_letter(letter):
+    """Fetches a list of meals that start with a given letter."""
+    response = requests.get(f"{BASE_URL}search.php?f={letter}")
+    if response.status_code == 200:
+        return response.json().get('meals', [])
+    return []
+
+def get_meal_details(meal_id):
+    """Fetches the full details of a meal by its ID."""
+    response = requests.get(f"{BASE_URL}lookup.php?i={meal_id}")
+    if response.status_code == 200:
+        return response.json().get('meals', [])
+    return []
+
+def collect_all_recipes():
+    """Collects all recipes by iterating through the alphabet."""
+    all_meals = []
+    # Loop through all letters of the alphabet
+    for letter in string.ascii_lowercase:
+        print(f"Fetching meals starting with letter: {letter.upper()}...")
+        meals_by_letter = get_meals_by_letter(letter)
+        if meals_by_letter:
+            for meal in meals_by_letter:
+                meal_details = get_meal_details(meal['idMeal'])
+                if meal_details:
+                    all_meals.append(meal_details[0])
+            # Add a small delay to avoid hitting rate limits
+            time.sleep(1)
+    return all_meals
+
+if __name__ == "__main__":
+    # This will run the data collection process
+    collected_recipes = collect_all_recipes()
+
+    # Save the collected data to a JSON Lines file
+    with open("themealdb_dataset.jsonl", "w") as f:
+        for meal in collected_recipes:
+            # We add dummy nutritional data and user info here to prepare for fine-tuning
+            # In a real project, you would enrich this with real data
+            training_example = {
+                "prompt": f"User info: 180 lbs, muscle gain, no dairy allergy. Goal: High-protein dinner. Generate a meal plan from the following meal: {meal['strMeal']}.",
+                "completion": f"Meal: {meal['strMeal']}. Ingredients: {meal['strIngredient1']}, {meal['strIngredient2']}, ... Instructions: {meal['strInstructions']}"
+            }
+            f.write(json.dumps(training_example) + '\n')
+            
+    print(f"Successfully collected and saved {len(collected_recipes)} recipes to mealdb_dataset.jsonl")
