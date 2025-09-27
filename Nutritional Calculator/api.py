@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Dict, Any
 import uvicorn
 
-from nutrition_calculator import (
+from nutrition_calculator_simple import (
     UserProfile, 
     NutritionalTargets, 
     NutritionCalculator
