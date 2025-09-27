@@ -32,9 +32,9 @@ def collect_all_recipes():
             for meal in meals_by_letter:
                 meal_details = get_meal_details(meal['idMeal'])
                 if meal_details:
-                    all_meals.append(meal_details[0])
+                    all_meals.append(meal_details[0]) # meal_details[0] is the dictionary with all meal info
             # Add a small delay to avoid hitting rate limits
-            time.sleep(1)
+            time.sleep(1) # Be mindful of API rate limits
     return all_meals
 
 if __name__ == "__main__":
@@ -42,14 +42,9 @@ if __name__ == "__main__":
     collected_recipes = collect_all_recipes()
 
     # Save the collected data to a JSON Lines file
-    with open("themealdb_dataset.jsonl", "w") as f:
+    # We will now save the 'meal' dictionary directly, without the 'prompt'/'completion' wrapping
+    with open("themealdb_raw_dataset1.jsonl", "w") as f: # Changed filename for clarity
         for meal in collected_recipes:
-            # We add dummy nutritional data and user info here to prepare for fine-tuning
-            # In a real project, you would enrich this with real data
-            training_example = {
-                "prompt": f"User info: 180 lbs, muscle gain, no dairy allergy. Goal: High-protein dinner. Generate a meal plan from the following meal: {meal['strMeal']}.",
-                "completion": f"Meal: {meal['strMeal']}. Ingredients: {meal['strIngredient1']}, {meal['strIngredient2']}, ... Instructions: {meal['strInstructions']}"
-            }
-            f.write(json.dumps(training_example) + '\n')
-            
-    print(f"Successfully collected and saved {len(collected_recipes)} recipes to mealdb_dataset.jsonl")
+            f.write(json.dumps(meal) + '\n') # Save the raw meal dictionary
+
+    print(f"Successfully collected and saved {len(collected_recipes)} raw recipes to mealdb_raw_dataset1.jsonl")
