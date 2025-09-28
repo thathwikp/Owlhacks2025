@@ -35,38 +35,40 @@ import importlib.util
 KMODEL_AVAILABLE = False
 KMODEL_MODULE = None
 KMODEL_DIR = None  # for diagnostics
+KMODEL_LOAD_ERROR: Optional[str] = None
 
 
 def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app, resources={r"*": {"origins": "*"}})
 
-    # Initialize KNN/KMeans recommendations module (kmodel.py)
-    global KMODEL_AVAILABLE, KMODEL_MODULE, KMODEL_DIR
-    try:
-        # Preferred: add kmodel directory to sys.path and import by name
-        candidate_dir = os.path.join(os.path.dirname(CURRENT_DIR), "K-Means Model")
-        if os.path.isdir(candidate_dir) and candidate_dir not in sys.path:
-            sys.path.append(candidate_dir)
+    # Initialize KNN/KMeans recommendations module (kmodel.py) by absolute path
+    global KMODEL_AVAILABLE, KMODEL_MODULE, KMODEL_DIR, KMODEL_LOAD_ERROR
+    candidate_dir = os.path.join(os.path.dirname(CURRENT_DIR), "K-Means Model")
+    kmodel_path = os.path.join(candidate_dir, "kmodel.py")
+    if os.path.exists(kmodel_path):
         try:
-            KMODEL_MODULE = importlib.import_module("kmodel")
-            KMODEL_AVAILABLE = hasattr(KMODEL_MODULE, "generate_recommendations")
-            KMODEL_DIR = candidate_dir if os.path.isdir(candidate_dir) else None
-        except Exception:
-            # Fallback: import by absolute path
-            kmodel_path = os.path.join(candidate_dir, "kmodel.py")
-            if os.path.exists(kmodel_path):
-                spec = importlib.util.spec_from_file_location("kmodel", kmodel_path)
-                if spec and spec.loader:
-                    KMODEL_MODULE = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(KMODEL_MODULE)  # type: ignore[attr-defined]
-                    KMODEL_AVAILABLE = hasattr(KMODEL_MODULE, "generate_recommendations")
-                    KMODEL_DIR = candidate_dir
-        else:
-            app.logger.warning("kmodel.py not found. Meal recommendations will be unavailable.")
-    except Exception as e:
-        app.logger.error(f"Failed to load kmodel.py: {e}")
+            spec = importlib.util.spec_from_file_location("kmodel", kmodel_path)
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)  # type: ignore[attr-defined]
+                KMODEL_MODULE = module
+                KMODEL_AVAILABLE = hasattr(module, "generate_recommendations")
+                KMODEL_DIR = candidate_dir
+                if not KMODEL_AVAILABLE:
+                    KMODEL_LOAD_ERROR = "kmodel.py does not define generate_recommendations"
+            else:
+                KMODEL_AVAILABLE = False
+                KMODEL_LOAD_ERROR = "Could not create import spec for kmodel.py"
+        except Exception as e:
+            app.logger.error(f"Failed to load kmodel.py: {e}")
+            KMODEL_AVAILABLE = False
+            KMODEL_LOAD_ERROR = str(e)
+    else:
+        app.logger.warning("kmodel.py not found. Meal recommendations will be unavailable.")
         KMODEL_AVAILABLE = False
+        KMODEL_DIR = None
+        KMODEL_LOAD_ERROR = "kmodel.py not found in 'K-Means Model' directory"
 
     @app.route("/", methods=["GET"])
     def root():
@@ -355,6 +357,7 @@ def create_app() -> Flask:
                 "clustering_available": KMODEL_AVAILABLE,
                 "kmodel_dir": KMODEL_DIR,
                 "kmodel_loaded": bool(KMODEL_MODULE),
+                "kmodel_load_error": KMODEL_LOAD_ERROR,
             }
         )
 

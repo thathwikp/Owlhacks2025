@@ -31,35 +31,43 @@ def _resolve_dataset_path() -> str:
         "themealdb_calculated.jsonl not found. Place it under 'Meals Recipes/themealdb_calculated.jsonl' in the repo."
     )
 
-
-df = pd.read_json(_resolve_dataset_path(), lines=True)
-
-# Extract nutrition features from the nested structure
-nutrition_df = pd.json_normalize(df['nutrition'].tolist())
-df = pd.concat([df, nutrition_df], axis=1)
-
-# Select features
+# Lazy globals
+df: pd.DataFrame | None = None
 features = ['Calories', 'Protein', 'Fat', 'Carbohydrates']
-data_to_cluster = df[features]
+scaler = None
+kmeans_model = None
+_means = None
+_stds = None
 
-# Prepare scaling and (optional) clustering
-if _SKLEARN_AVAILABLE:
-    scaler = StandardScaler()
-    data_scaled = scaler.fit_transform(data_to_cluster)
-    # num of clusters
-    k = 20
-    kmeans_model = KMeans(n_clusters=k, random_state=42, n_init=10)
-    # train model
-    kmeans_model.fit(data_scaled)
-    df['cluster'] = kmeans_model.labels_
-else:
-    # Manual standardization (mean/std) for distance computations
-    _means = data_to_cluster.mean()
-    _stds = data_to_cluster.std().replace(0, 1)
-    def _manual_scale(X: pd.DataFrame) -> np.ndarray:
-        return ((X - _means) / _stds).to_numpy()
-    # No clustering labels in fallback mode
-    df['cluster'] = -1
+def _ensure_loaded():
+    """Load dataset and prepare scaler/kmeans or fallback stats once."""
+    global df, scaler, kmeans_model, _means, _stds
+    if df is not None:
+        return
+    _df = pd.read_json(_resolve_dataset_path(), lines=True)
+    nutrition_df = pd.json_normalize(_df['nutrition'].tolist())
+    _df = pd.concat([_df, nutrition_df], axis=1)
+    data_to_cluster = _df[features]
+
+    if _SKLEARN_AVAILABLE:
+        _scaler = StandardScaler()
+        data_scaled = _scaler.fit_transform(data_to_cluster)
+        _kmeans = KMeans(n_clusters=20, random_state=42, n_init=10)
+        _kmeans.fit(data_scaled)
+        _df['cluster'] = _kmeans.labels_
+        scaler = _scaler
+        kmeans_model = _kmeans
+    else:
+        _m = data_to_cluster.mean()
+        _s = data_to_cluster.std().replace(0, 1)
+        def _manual_scale(X: pd.DataFrame) -> np.ndarray:
+            return ((X - _m) / _s).to_numpy()
+        globals()['_manual_scale'] = _manual_scale
+        _means = _m
+        _stds = _s
+        _df['cluster'] = -1
+
+    df = _df
 
 # calculate target vector
 def get_per_meal_target(num_meal_preference, user_daily_macros):
@@ -70,14 +78,10 @@ def get_per_meal_target(num_meal_preference, user_daily_macros):
         user_daily_macros['Fat'] / num_meal_preference
     ]).reshape(1,-1)
 
-def generate_recommendations(user_daily_macros, num_meal_preference=3, num_recommendations=16, exclude_meals=None):
-
-    if exclude_meals and isinstance(exclude_meals, list):
-        df = df[~df['Meal'].isin(exclude_meals)]
-        # Handle case where too many meals are excluded
-        if df.shape[0] < num_recommendations:
-            print("Warning: Not enough unique meals available to generate a full new list.")
-
+def generate_recommendations(user_daily_macros, num_meal_preference=3, num_recommendations=16):
+    # Ensure dataset/model loaded
+    _ensure_loaded()
+    # Build per-meal target
     per_meal_target = get_per_meal_target(num_meal_preference, user_daily_macros)
 
     if _SKLEARN_AVAILABLE:
