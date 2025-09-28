@@ -60,6 +60,7 @@ def _ensure_loaded():
     else:
         _m = data_to_cluster.mean()
         _s = data_to_cluster.std().replace(0, 1)
+        
         def _manual_scale(X: pd.DataFrame) -> np.ndarray:
             return ((X - _m) / _s).to_numpy()
         globals()['_manual_scale'] = _manual_scale
@@ -152,4 +153,3 @@ if __name__ == "__main__":
     weight_loss_recs = generate_recommendations(weight_loss_macros)
     print(weight_loss_recs)
     print(weight_loss_recs[['Calories','Protein', 'Carbohydrates', 'Fat']])
-
