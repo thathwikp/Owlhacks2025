@@ -6,7 +6,7 @@ from sklearn.metrics import euclidean_distances
 
 
 # Load data
-df = pd.read_json(r"C:\Users\thath\Desktop\OwlHacks\Meals Recipes\themealdb_calculated_data.jsonl", lines=True)
+df = pd.read_json(r"C:\Users\thath\Desktop\OwlHacks\Meals Recipes\themealdb_calculated.jsonl", lines=True)
 
 # Extract nutrition features from the nested structure
 nutrition_df = pd.json_normalize(df['nutrition'].tolist())
