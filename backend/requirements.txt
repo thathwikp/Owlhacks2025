@@ -4,6 +4,10 @@ uvicorn==0.24.0
 pydantic==2.5.0
 python-multipart==0.0.6
 
+# Flask backend (added)
+Flask>=2.3.0
+flask-cors>=4.0.0
+
 # Data processing and machine learning
 pandas>=1.5.0
 numpy>=1.21.0
