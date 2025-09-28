@@ -598,6 +598,7 @@ body {
     max-height: 100px;
     overflow: hidden;
     position: relative;
+    white-space: pre-wrap; /* preserve newlines from API text */
 }
 
 .meal-instructions.expanded {

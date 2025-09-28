@@ -361,10 +361,10 @@ function displayMealRecommendations(response) {
                 ` : ''}
 
                 <div class="meal-instructions" id="instructions-${mealId}">
-                    ${truncateText(meal.instructions || '', 150)}
+                    ${meal.instructions ? (meal.instructions) : ''}
                 </div>
 
-                ${(meal.instructions || '').length > 150 ? `
+                ${(meal.instructions || '').trim().length > 0 ? `
                     <button class="expand-button" onclick="event.stopPropagation(); toggleInstructions('${mealId}')">
                         <i class="fas fa-chevron-down"></i> Show More
                     </button>
@@ -399,14 +399,15 @@ function displayMealRecommendations(response) {
 
 function toggleInstructions(mealId) {
     const instructionsEl = document.getElementById(`instructions-${mealId}`);
-    const button = instructionsEl.nextElementSibling;
-    
-    if (instructionsEl.classList.contains('expanded')) {
-        instructionsEl.classList.remove('expanded');
-        button.innerHTML = '<i class="fas fa-chevron-down"></i> Show More';
-    } else {
-        instructionsEl.classList.add('expanded');
-        button.innerHTML = '<i class="fas fa-chevron-up"></i> Show Less';
+    if (!instructionsEl) return;
+    const card = document.querySelector(`[data-mealid="${mealId}"]`);
+    const button = card ? card.querySelector('.expand-button') : null;
+
+    const isExpanded = instructionsEl.classList.toggle('expanded');
+    if (button) {
+        button.innerHTML = isExpanded
+            ? '<i class="fas fa-chevron-up"></i> Show Less'
+            : '<i class="fas fa-chevron-down"></i> Show More';
     }
 }
 
