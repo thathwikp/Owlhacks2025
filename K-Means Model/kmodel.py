@@ -78,7 +78,7 @@ def generate_recommendations(user_daily_macros, num_meal_preference=3, num_recom
         if df.shape[0] < num_recommendations:
             print("Warning: Not enough unique meals available to generate a full new list.")
 
-    scaled_per_meal_target = scaler.transform(get_per_meal_target(num_meal_preference, user_daily_macros))
+    per_meal_target = get_per_meal_target(num_meal_preference, user_daily_macros)
 
     if _SKLEARN_AVAILABLE:
         # Use trained scaler/cluster centers
