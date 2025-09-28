@@ -5,9 +5,9 @@ import math
 # --- 1. CONFIGURATION AND DATA ---
 
 # Global file paths (Ensure these files are in the same directory!)
-ORG_DATA_FILE = "/Users/Ariuk/Desktop/OwlHacks2025/Owlhacks2025/Owlhacks2025/Meals Recipes/themealdb_organized.jsonl"
-USDA_DATA_FILE = "/Users/Ariuk/Desktop/OwlHacks2025/Owlhacks2025/Owlhacks2025/Meals Recipes/FoodData_Central_foundation_food_json_2025-04-24.json"
-OUTPUT_FILE = "/Users/Ariuk/Desktop/OwlHacks2025/Owlhacks2025/Owlhacks2025/Meals Recipes/themealdb_calculated.jsonl" # Renamed output file for clarity
+ORG_DATA_FILE = r"C:\Users\thath\Desktop\OwlHacks\Meals Recipes\themealdb_organized.jsonl"
+USDA_DATA_FILE = r"C:\Users\thath\Desktop\OwlHacks\Meals Recipes\FoodData_Central_foundation_food_json_2025-04-24.json"
+OUTPUT_FILE = r"C:\Users\thath\Desktop\OwlHacks\Meals Recipes\themealdb_calculated.jsonl" # Renamed output file for clarity
 
 # Fallback list for common ingredients not easily found in the USDA file (per 100g)
 # This list is prioritized for staples and hard-to-match items.
