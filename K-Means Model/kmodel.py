@@ -37,7 +37,14 @@ def get_per_meal_target(num_meal_preference, user_daily_macros):
         user_daily_macros['Fat'] / num_meal_preference
     ]).reshape(1,-1)
 
-def generate_recommendations(user_daily_macros, num_meal_preference=3, num_recommendations=16):
+def generate_recommendations(user_daily_macros, num_meal_preference=3, num_recommendations=16, exclude_meals=None):
+
+    if exclude_meals and isinstance(exclude_meals, list):
+        df = df[~df['Meal'].isin(exclude_meals)]
+        # Handle case where too many meals are excluded
+        if df.shape[0] < num_recommendations:
+            print("Warning: Not enough unique meals available to generate a full new list.")
+
     scaled_per_meal_target = scaler.transform(get_per_meal_target(num_meal_preference, user_daily_macros))
 
     cluster_centers = kmeans_model.cluster_centers_
@@ -96,3 +103,4 @@ if __name__ == "__main__":
     weight_loss_recs = generate_recommendations(weight_loss_macros)
     print(weight_loss_recs)
     print(weight_loss_recs[['Calories','Protein', 'Carbohydrates', 'Fat']])
+
