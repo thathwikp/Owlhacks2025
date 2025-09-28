@@ -11,6 +11,8 @@ const mealRecommendations = document.getElementById('mealRecommendations');
 // State Management
 let currentUserProfile = null;
 let currentNutritionTargets = null;
+let selectedMeals = [];
+let groceryMap = new Map();
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -41,6 +43,9 @@ function initializeApp() {
     document.querySelectorAll('.hero-card, .form-group, .nutrition-card, .meal-card').forEach(el => {
         observer.observe(el);
     });
+
+    // Inject minimal styles for sidebar layout
+    injectPlanStyles();
 }
 
 function setupEventListeners() {
@@ -303,9 +308,20 @@ function displayMealRecommendations(response) {
         `;
         return;
     }
-    
-    const mealsHTML = response.recommended_meals.map(meal => `
-        <div class="meal-card slide-up">
+
+    // Ensure two-column layout (sidebar + main)
+    ensureRecommendationLayout();
+
+    const mealsHTML = response.recommended_meals.map((meal, idx) => {
+        const mealId = slugify(meal.name) + '-' + idx;
+        const ingredients = normalizeIngredients(meal.ingredients || []);
+        const firstN = 6;
+        const hasMore = ingredients.length > firstN;
+        const visible = ingredients.slice(0, firstN);
+        const hidden = hasMore ? ingredients.slice(firstN) : [];
+
+        return `
+        <div class="meal-card slide-up" data-mealid="${mealId}" data-meal='${JSON.stringify(safeMealForPlan(meal)).replace(/'/g, "&apos;")}'>
             <div class="meal-header">
                 <div class="meal-name">${meal.name}</div>
                 <div class="meal-meta">
@@ -332,38 +348,38 @@ function displayMealRecommendations(response) {
                         <div class="label">Fat</div>
                     </div>
                 </div>
-                
-                ${meal.ingredients && meal.ingredients.length > 0 ? `
+
+                ${ingredients.length > 0 ? `
                     <div class="meal-ingredients">
                         <h4><i class="fas fa-list"></i> Ingredients</h4>
-                        <div class="ingredients-list">
-                            ${meal.ingredients.slice(0, 6).map(ing => 
-                                `<span class="ingredient-tag">${ing.name || ing}</span>`
-                            ).join('')}
-                            ${meal.ingredients.length > 6 ? `<span class="ingredient-tag">+${meal.ingredients.length - 6} more</span>` : ''}
+                        <div class="ingredients-list" id="ingredients-${mealId}">
+                            ${visible.map(ing => `<span class="ingredient-tag">${ing}</span>`).join('')}
+                            ${hasMore ? `<button class="expand-ingredients" onclick="event.stopPropagation(); toggleIngredients('${mealId}')">More</button>` : ''}
+                            ${hasMore ? `<div class="ingredients-hidden" id="ingredients-hidden-${mealId}" style="display:none;">${hidden.map(ing => `<span class='ingredient-tag'>${ing}</span>`).join('')}</div>` : ''}
                         </div>
                     </div>
                 ` : ''}
-                
-                <div class="meal-instructions" id="instructions-${meal.name.replace(/\s+/g, '-')}">
-                    ${truncateText(meal.instructions, 150)}
+
+                <div class="meal-instructions" id="instructions-${mealId}">
+                    ${truncateText(meal.instructions || '', 150)}
                 </div>
-                
-                ${meal.instructions.length > 150 ? `
-                    <button class="expand-button" onclick="toggleInstructions('${meal.name.replace(/\s+/g, '-')}')">
+
+                ${(meal.instructions || '').length > 150 ? `
+                    <button class="expand-button" onclick="event.stopPropagation(); toggleInstructions('${mealId}')">
                         <i class="fas fa-chevron-down"></i> Show More
                     </button>
                 ` : ''}
-                
-                <div class="similarity-score">
-                    <i class="fas fa-star"></i>
-                    Match: ${Math.round(meal.similarity_score * 100)}%
+
+                <div class="plan-actions">
+                    <button class="add-plan-button" onclick='event.stopPropagation(); addMealToPlan(${JSON.stringify(safeMealForPlan(meal))})'>
+                        <i class="fas fa-plus-circle"></i> Add to Plan
+                    </button>
                 </div>
             </div>
-        </div>
-    `).join('');
-    
-    mealRecommendations.innerHTML = `
+        </div>`;
+    }).join('');
+
+    const mainHTML = `
         <div class="recommendations-header">
             <h3>
                 <i class="fas fa-utensils"></i>
@@ -371,10 +387,14 @@ function displayMealRecommendations(response) {
             </h3>
             <p>Based on your profile, here are ${response.recommended_meals.length} meals tailored to your nutritional needs</p>
         </div>
-        <div class="meals-grid">
+        <div class="meals-grid" id="mealsGrid">
             ${mealsHTML}
         </div>
     `;
+    const mainContainer = document.getElementById('recommendationMain') || mealRecommendations;
+    mainContainer.innerHTML = mainHTML;
+    attachMealCardClickHandlers();
+    renderPlanSidebar();
 }
 
 function toggleInstructions(mealId) {
@@ -388,6 +408,192 @@ function toggleInstructions(mealId) {
         instructionsEl.classList.add('expanded');
         button.innerHTML = '<i class="fas fa-chevron-up"></i> Show Less';
     }
+}
+
+function toggleIngredients(mealId) {
+    const hiddenBlock = document.getElementById(`ingredients-hidden-${mealId}`);
+    if (!hiddenBlock) return;
+    const btn = hiddenBlock.previousElementSibling; // the expand button
+    if (hiddenBlock.style.display === 'none') {
+        hiddenBlock.style.display = 'block';
+        if (btn && btn.classList && btn.classList.contains('expand-ingredients')) {
+            btn.textContent = 'Less';
+        }
+    } else {
+        hiddenBlock.style.display = 'none';
+        if (btn && btn.classList && btn.classList.contains('expand-ingredients')) {
+            btn.textContent = 'More';
+        }
+    }
+}
+
+function addMealToPlan(meal) {
+    selectedMeals.push(meal);
+    // Update grocery map
+    const ings = normalizeIngredients(meal.ingredients || []);
+    ings.forEach(name => {
+        const key = name.toLowerCase();
+        groceryMap.set(key, (groceryMap.get(key) || 0) + 1);
+    });
+    renderPlanSidebar();
+    showNotification(`${meal.name} added to your plan.`, 'success');
+}
+
+function removeMealFromPlan(index) {
+    const [removed] = selectedMeals.splice(index, 1);
+    if (removed) {
+        // Decrement grocery counts
+        normalizeIngredients(removed.ingredients || []).forEach(name => {
+            const key = name.toLowerCase();
+            const cur = groceryMap.get(key) || 0;
+            if (cur <= 1) groceryMap.delete(key); else groceryMap.set(key, cur - 1);
+        });
+        renderPlanSidebar();
+        showNotification(`${removed.name} removed from your plan.`, 'info');
+    }
+}
+
+function renderPlanSidebar() {
+    const sidebar = document.getElementById('planSidebar');
+    if (!sidebar) return;
+
+    const totals = selectedMeals.reduce((acc, m) => {
+        acc.calories += Math.round(m.calories || 0);
+        acc.protein += Math.round(m.protein || 0);
+        acc.carbohydrates += Math.round(m.carbohydrates || 0);
+        acc.fat += Math.round(m.fat || 0);
+        return acc;
+    }, { calories:0, protein:0, carbohydrates:0, fat:0 });
+
+    const dailyTargets = currentNutritionTargets ? {
+        calories: Math.round(currentNutritionTargets.calculations?.target_calories || 0),
+        protein: Math.round(currentNutritionTargets.macronutrients?.protein?.grams || 0),
+        carbohydrates: Math.round(currentNutritionTargets.macronutrients?.carbohydrates?.grams || 0),
+        fat: Math.round(currentNutritionTargets.macronutrients?.fat?.grams || 0)
+    } : null;
+
+    const groceryItems = Array.from(groceryMap.entries())
+        .sort((a,b) => b[1]-a[1])
+        .slice(0, 200)
+        .map(([name, count]) => `<li><span>${name}</span>${count>1?` <small>x${count}</small>`:''}</li>`)   
+        .join('');
+
+    sidebar.innerHTML = `
+        <div class="plan-panel">
+            <h3><i class="fas fa-calendar-check"></i> Daily Plan</h3>
+            <div class="plan-macros">
+                <div class="macro-row"><span>Calories</span><strong>${totals.calories}</strong>${dailyTargets?`<small>/ ${dailyTargets.calories}</small>`:''}</div>
+                <div class="macro-row"><span>Protein</span><strong>${totals.protein} g</strong>${dailyTargets?`<small>/ ${dailyTargets.protein} g</small>`:''}</div>
+                <div class="macro-row"><span>Carbs</span><strong>${totals.carbohydrates} g</strong>${dailyTargets?`<small>/ ${dailyTargets.carbohydrates} g</small>`:''}</div>
+                <div class="macro-row"><span>Fat</span><strong>${totals.fat} g</strong>${dailyTargets?`<small>/ ${dailyTargets.fat} g</small>`:''}</div>
+            </div>
+            <div class="selected-meals">
+                <h4>Selected Meals (${selectedMeals.length})</h4>
+                <ul>
+                    ${selectedMeals.map((m, i) => `
+                        <li>
+                            <span>${m.name}</span>
+                            <button class="remove-btn" onclick="removeMealFromPlan(${i})" title="Remove"><i class="fas fa-times"></i></button>
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+            <div class="grocery-list">
+                <h4><i class="fas fa-shopping-basket"></i> Grocery List</h4>
+                ${groceryItems ? `<ul>${groceryItems}</ul>` : '<p><em>No items yet. Add meals to build your list.</em></p>'}
+            </div>
+        </div>
+    `;
+}
+
+function ensureRecommendationLayout() {
+    const layoutId = 'recommendationLayout';
+    if (document.getElementById(layoutId)) return;
+    const layout = document.createElement('div');
+    layout.id = layoutId;
+    layout.className = 'recommendation-layout';
+
+    const sidebar = document.createElement('aside');
+    sidebar.id = 'planSidebar';
+    sidebar.className = 'plan-sidebar';
+
+    const main = document.createElement('div');
+    main.id = 'recommendationMain';
+    main.className = 'plan-main';
+
+    // Insert layout before the mealRecommendations container
+    const parent = mealRecommendations.parentNode;
+    parent.insertBefore(layout, mealRecommendations);
+    layout.appendChild(sidebar);
+    layout.appendChild(main);
+}
+
+function injectPlanStyles() {
+    if (document.getElementById('planStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'planStyles';
+    style.textContent = `
+    .recommendation-layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start; }
+    .plan-sidebar { position: sticky; top: 84px; }
+    .plan-panel { background: #0f172a; color: #e2e8f0; padding: 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.2); }
+    .plan-panel h3 { margin: 0 0 12px; font-size: 1.1rem; }
+    .plan-macros { display: grid; gap: 8px; margin-bottom: 12px; }
+    .plan-macros .macro-row { display:flex; justify-content: space-between; align-items: baseline; font-size: .95rem; }
+    .plan-macros .macro-row small { opacity: .8; margin-left: 6px; }
+    .selected-meals ul, .grocery-list ul { list-style: none; padding: 0; margin: 8px 0 0; }
+    .selected-meals li { display:flex; justify-content: space-between; align-items:center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+    .remove-btn { background:none; border:none; color:#94a3b8; cursor:pointer; }
+    .remove-btn:hover { color:#f87171; }
+    .ingredients-hidden { margin-top: 8px; }
+    .expand-ingredients { background: none; border: 1px dashed #64748b; color: #e2e8f0; padding: 4px 8px; border-radius: 8px; cursor: pointer; margin-left: 6px; }
+    .plan-actions { margin-top: 12px; }
+    .add-plan-button { background: #22c55e; color: #0b0f1a; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+    .add-plan-button:hover { filter: brightness(1.1); }
+    @media (max-width: 980px) { .recommendation-layout { grid-template-columns: 1fr; } .plan-sidebar { position: relative; top: 0; } }
+    `;
+    document.head.appendChild(style);
+}
+
+function normalizeIngredients(rawList) {
+    return (rawList || []).map(x => typeof x === 'string' ? x : (x.name || `${x.ingredient||''} ${x.measure||''}`.trim())).filter(Boolean);
+}
+
+function slugify(s) {
+    return (s||'meal').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+function safeMealForPlan(meal) {
+    return {
+        name: meal.name,
+        category: meal.category,
+        area: meal.area,
+        calories: meal.calories,
+        protein: meal.protein,
+        carbohydrates: meal.carbohydrates,
+        fat: meal.fat,
+        ingredients: normalizeIngredients(meal.ingredients || []),
+        instructions: meal.instructions || ''
+    };
+}
+
+function attachMealCardClickHandlers() {
+    const grid = document.getElementById('mealsGrid');
+    if (!grid) return;
+    grid.addEventListener('click', (e) => {
+        const target = e.target;
+        // Ignore clicks on control buttons
+        if (target.closest('.expand-ingredients') || target.closest('.expand-button') || target.closest('.add-plan-button') || target.closest('.remove-btn')) {
+            return;
+        }
+        const card = target.closest('.meal-card');
+        if (!card) return;
+        try {
+            const mealData = JSON.parse(card.getAttribute('data-meal').replace(/&apos;/g, "'"));
+            addMealToPlan(mealData);
+        } catch (err) {
+            console.warn('Could not parse meal data from card', err);
+        }
+    });
 }
 
 function showResults() {
@@ -628,6 +834,9 @@ function formatGoal(goal) {
 // Export functions for global access
 window.scrollToProfile = scrollToProfile;
 window.toggleInstructions = toggleInstructions;
+window.toggleIngredients = toggleIngredients;
+window.addMealToPlan = addMealToPlan;
+window.removeMealFromPlan = removeMealFromPlan;
 
 // Add some additional interactive features
 document.addEventListener('DOMContentLoaded', function() {
