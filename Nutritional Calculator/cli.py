@@ -4,7 +4,7 @@ Provides an interactive way to calculate nutritional targets.
 """
 
 import sys
-from nutrition_calculator import UserProfile, NutritionCalculator
+from nutrition_calculator_simple import UserProfile, NutritionCalculator
 
 
 def get_user_input():

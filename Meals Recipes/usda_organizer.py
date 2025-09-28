@@ -6,7 +6,7 @@ import re
 UNIT_CONVERSIONS = {
     "cup": 240,    # Average weight of 1 cup in grams (for general liquids/powders)
     "tbsp": 15,    # 1 tablespoon = 15g
-    "tsp": 5,      # 1 teaspoon = 5g
+    "tsp": 0.5,      # 1 teaspoon = 5g
     "g": 1,        # Grams
     "kg": 1000,    # Kilograms
     "oz": 28.35,   # Ounces
@@ -15,7 +15,8 @@ UNIT_CONVERSIONS = {
     "dash": 0.5,   # A dash is a small amount
     "pinch": 0.5,  # A pinch is a small amount
     "clove": 5,    # Average weight of a garlic clove
-    "whole": 100,  # A very rough default for a single "whole" item
+    "whole": 50,   # A very rough default for a single "whole" item
+    "bulb": 450,   # Average weight of a bulb lettuce
 }
 
 # A list of unwanted, descriptive words to be removed from ingredient names.
@@ -105,7 +106,27 @@ def parse_ingredient_string(ingredient_string):
         "quantity_g": 0.0, # Default to 0g if nothing is found
     }
 
-def organize_meal_data(raw_file="/Users/Ariuk/Desktop/OwlHacks2025/Owlhacks2025Owlhacks2025/Meals Recipes/themealdb_dataset.jsonl/", new_file="/Users/Ariuk/Desktop/OwlHacks2025/Owlhacks2025/Owlhacks2025/Meals Recipes/themealdb_organized.jsonl/"):
+def parse_meal_from_completion(completion_text):
+    """Parse meal data from the completion field."""
+    lines = completion_text.split('\n')
+    meal_data = {}
+    
+    for line in lines:
+        if line.startswith('Meal:'):
+            meal_data['strMeal'] = line.replace('Meal:', '').strip()
+        elif line.startswith('Category:'):
+            meal_data['strCategory'] = line.replace('Category:', '').strip()
+        elif line.startswith('Area:'):
+            meal_data['strArea'] = line.replace('Area:', '').strip()
+        elif line.startswith('Ingredients:'):
+            ingredients_text = line.replace('Ingredients:', '').strip()
+            meal_data['ingredients_text'] = ingredients_text
+        elif line.startswith('Instructions:'):
+            meal_data['strInstructions'] = line.replace('Instructions:', '').strip()
+    
+    return meal_data
+
+def organize_meal_data(raw_file="/Users/Ariuk/Desktop/OwlHacks2025/Owlhacks2025/Owlhacks2025/Meals Recipes/themealdb_dataset.jsonl", new_file="/Users/Ariuk/Desktop/OwlHacks2025/Owlhacks2025/Owlhacks2025/Meals Recipes/themealdb_organized.jsonl"):
     """
     Reads the raw meal data, cleans and organizes it, and saves to a new file.
     """
@@ -113,37 +134,48 @@ def organize_meal_data(raw_file="/Users/Ariuk/Desktop/OwlHacks2025/Owlhacks2025O
 
     try:
         with open(raw_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                meal = json.loads(line)
+            for line_num, line in enumerate(f, 1):
+                try:
+                    data = json.loads(line)
+                    
+                    # Parse meal data from completion field
+                    meal = parse_meal_from_completion(data.get('completion', ''))
+                    
+                    if not meal.get('strMeal') or not meal.get('ingredients_text'):
+                        print(f"Skipping line {line_num}: Missing meal name or ingredients")
+                        continue
+                    
+                    cleaned_ingredients = []
+                    keep_recipe = True
+                    
+                    # Split ingredients by comma and parse each one
+                    for ingredient_string in meal['ingredients_text'].split(','):
+                        ingredient_string = ingredient_string.strip()
+                        if ingredient_string:
+                            parsed = parse_ingredient_string(ingredient_string)
+                            
+                            # Validation: if name is missing, skip the entire recipe
+                            if not parsed['name']:
+                                print(f"Skipping recipe '{meal.get('strMeal')}' due to missing name for ingredient: '{ingredient_string}'")
+                                keep_recipe = False
+                                break
+                            
+                            cleaned_ingredients.append(parsed)
+                    
+                    # Only add the meal if it passed validation
+                    if keep_recipe and cleaned_ingredients:
+                        organized_meal = {
+                            "strMeal": meal.get('strMeal'),
+                            "strCategory": meal.get('strCategory', 'Unknown'),
+                            "strArea": meal.get('strArea', 'Unknown'),
+                            "strInstructions": meal.get('strInstructions', ''),
+                            "ingredients": cleaned_ingredients
+                        }
+                        organized_meals.append(organized_meal)
                 
-                cleaned_ingredients = []
-                # Flag to check if the recipe should be kept
-                keep_recipe = True 
-                
-                for ingredient_data in meal['ingredients']:
-                    full_string = f"{ingredient_data['measure']} {ingredient_data['ingredient']}".strip()
-                    if full_string:
-                        parsed = parse_ingredient_string(full_string)
-
-                        # New validation: if name is missing OR quantity is 0, skip the entire recipe
-                        if not parsed['name'] or parsed['quantity_g'] == 0.0:
-                            print(f"Skipping recipe '{meal.get('strMeal')}' due to missing data for ingredient: '{full_string}'")
-                            keep_recipe = False
-                            break # Exit the inner loop
-                        
-                        cleaned_ingredients.append(parsed)
-                
-                # Only add the meal to the organized list if it passed the validation
-                if keep_recipe:
-                    organized_meal = {
-                        "idMeal": meal.get('idMeal'),
-                        "strMeal": meal.get('strMeal'),
-                        "strCategory": meal.get('strCategory'),
-                        "strArea": meal.get('strArea'),
-                        "strInstructions": meal.get('strInstructions'),
-                        "ingredients": cleaned_ingredients
-                    }
-                    organized_meals.append(organized_meal)
+                except json.JSONDecodeError as e:
+                    print(f"Error parsing JSON on line {line_num}: {e}")
+                    continue
 
     except FileNotFoundError:
         return f"Error: Raw data file '{raw_file}' not found."
